@@ -167,7 +167,9 @@ export const createSymbolTable = (): SymbolTable => {
       qualifiedName?: string;
     },
   ) => {
-    const qualifiedName = CLASS_TYPES.has(type) ? metadata?.qualifiedName ?? name : metadata?.qualifiedName;
+    const qualifiedName = CLASS_TYPES.has(type)
+      ? (metadata?.qualifiedName ?? name)
+      : metadata?.qualifiedName;
     const def: SymbolDefinition = {
       nodeId,
       filePath,
