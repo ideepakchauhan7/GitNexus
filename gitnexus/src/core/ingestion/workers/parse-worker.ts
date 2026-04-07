@@ -15,7 +15,6 @@ import { createRequire } from 'node:module';
 import { SupportedLanguages } from 'gitnexus-shared';
 import { getProvider } from '../languages/index.js';
 import { getTreeSitterBufferSize, TREE_SITTER_MAX_BUFFER } from '../constants.js';
-import { CLASS_TYPES } from '../symbol-table.js';
 import type { SymbolTable } from '../symbol-table.js';
 
 /** Language grammar type accepted by Parser.setLanguage(). */
@@ -1811,14 +1810,22 @@ const processFileGroup = (
         }
       }
 
-      const nodeLabel = getLabelFromCaptures(captureMap, provider);
-      if (!nodeLabel) continue;
+      const definitionNode = getDefinitionNodeFromCaptures(captureMap);
+      const defaultNodeLabel = getLabelFromCaptures(captureMap, provider);
+      if (!defaultNodeLabel) continue;
 
       const nameNode = captureMap['name'];
+      const extractedClassSymbol =
+        definitionNode && provider.classExtractor?.isTypeDeclaration(definitionNode)
+          ? provider.classExtractor.extract(definitionNode, {
+              name: nameNode?.text,
+              type: defaultNodeLabel,
+            })
+          : null;
+      const nodeLabel = extractedClassSymbol?.type ?? defaultNodeLabel;
       // Synthesize name for constructors without explicit @name capture (e.g. Swift init)
-      if (!nameNode && nodeLabel !== 'Constructor') continue;
-      const nodeName = nameNode ? nameNode.text : 'init';
-      const definitionNode = getDefinitionNodeFromCaptures(captureMap);
+      if (!nameNode && nodeLabel !== 'Constructor' && !extractedClassSymbol) continue;
+      const nodeName = extractedClassSymbol?.name ?? (nameNode ? nameNode.text : 'init');
       const startLine = definitionNode
         ? definitionNode.startPosition.row + lineOffset
         : nameNode
@@ -1908,11 +1915,12 @@ const processFileGroup = (
         arityTag += constTagForId(defMethodMap, nodeName, arityForId, defMethodInfo, groups);
       }
       const nodeId = generateId(nodeLabel, `${file.path}:${qualifiedName}${arityTag}`);
+      const classNodeForSymbol = definitionNode || nameNode;
       const qualifiedTypeName =
-        CLASS_TYPES.has(nodeLabel) && (definitionNode || nameNode)
-          ? (provider.classExtractor?.extractQualifiedName(definitionNode || nameNode, nodeName) ??
-            nodeName)
-          : undefined;
+        extractedClassSymbol?.qualifiedName ??
+        (classNodeForSymbol && provider.classExtractor?.isTypeDeclaration(classNodeForSymbol)
+          ? (provider.classExtractor.extractQualifiedName(classNodeForSymbol, nodeName) ?? nodeName)
+          : undefined);
 
       const description = provider.descriptionExtractor?.(nodeLabel, nodeName, captureMap);
 

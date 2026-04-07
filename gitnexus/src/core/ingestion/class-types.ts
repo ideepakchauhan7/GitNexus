@@ -1,5 +1,16 @@
-import type { SupportedLanguages } from 'gitnexus-shared';
+import type { NodeLabel, SupportedLanguages } from 'gitnexus-shared';
 import type { SyntaxNode } from './utils/ast-helpers.js';
+
+export type ClassLikeNodeLabel = Extract<
+  NodeLabel,
+  'Class' | 'Struct' | 'Interface' | 'Enum' | 'Record'
+>;
+
+export interface ExtractedClassSymbol {
+  name: string;
+  type: ClassLikeNodeLabel;
+  qualifiedName: string;
+}
 
 /**
  * Cross-language qualified type names are normalized to dot-separated scope
@@ -11,6 +22,13 @@ import type { SyntaxNode } from './utils/ast-helpers.js';
 export interface ClassExtractor {
   language: SupportedLanguages;
   isTypeDeclaration(node: SyntaxNode): boolean;
+  extract(
+    node: SyntaxNode,
+    fallback?: {
+      name?: string;
+      type?: NodeLabel | null;
+    },
+  ): ExtractedClassSymbol | null;
   extractQualifiedName(node: SyntaxNode, simpleName: string): string | null;
 }
 
@@ -20,5 +38,7 @@ export interface ClassExtractionConfig {
   fileScopeNodeTypes?: string[];
   ancestorScopeNodeTypes?: string[];
   scopeNameNodeTypes?: string[];
+  extractName?: (node: SyntaxNode) => string | undefined;
+  extractType?: (node: SyntaxNode) => ClassLikeNodeLabel | undefined;
   extractScopeSegments?: (node: SyntaxNode) => string[] | null | undefined;
 }

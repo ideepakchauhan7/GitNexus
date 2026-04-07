@@ -4,7 +4,6 @@ import Parser from 'tree-sitter';
 import { loadParser, loadLanguage, isLanguageAvailable } from '../tree-sitter/parser-loader.js';
 import { getProvider } from './languages/index.js';
 import { generateId } from '../../lib/utils.js';
-import { CLASS_TYPES } from './symbol-table.js';
 import type { SymbolTable } from './symbol-table.js';
 import { ASTCache } from './ast-cache.js';
 import { getLanguageFromFilename, SupportedLanguages } from 'gitnexus-shared';
@@ -370,21 +369,29 @@ const processParsingSequential = async (
         captureMap[c.name] = c.node;
       });
 
-      const nodeLabel = getLabelFromCaptures(captureMap, provider);
-      if (!nodeLabel) return;
+      const definitionNodeForRange = getDefinitionNodeFromCaptures(captureMap);
+      const definitionNode = getDefinitionNodeFromCaptures(captureMap);
+      const defaultNodeLabel = getLabelFromCaptures(captureMap, provider);
+      if (!defaultNodeLabel) return;
 
       const nameNode = captureMap['name'];
+      const extractedClassSymbol =
+        definitionNode && provider.classExtractor?.isTypeDeclaration(definitionNode)
+          ? provider.classExtractor.extract(definitionNode, {
+              name: nameNode?.text,
+              type: defaultNodeLabel,
+            })
+          : null;
+      const nodeLabel = extractedClassSymbol?.type ?? defaultNodeLabel;
       // Synthesize name for constructors without explicit @name capture (e.g. Swift init)
-      if (!nameNode && nodeLabel !== 'Constructor') return;
-      const nodeName = nameNode ? nameNode.text : 'init';
+      if (!nameNode && nodeLabel !== 'Constructor' && !extractedClassSymbol) return;
+      const nodeName = extractedClassSymbol?.name ?? (nameNode ? nameNode.text : 'init');
 
-      const definitionNodeForRange = getDefinitionNodeFromCaptures(captureMap);
       const startLine = definitionNodeForRange
         ? definitionNodeForRange.startPosition.row + lineOffset
         : nameNode
           ? nameNode.startPosition.row + lineOffset
           : lineOffset;
-      const definitionNode = getDefinitionNodeFromCaptures(captureMap);
 
       // Compute enclosing class BEFORE node ID — needed to qualify method IDs
       const needsOwner =
@@ -495,13 +502,12 @@ const processParsingSequential = async (
         );
       }
       const nodeId = generateId(nodeLabel, `${file.path}:${qualifiedName}${arityTag}`);
+      const classNodeForSymbol = definitionNodeForRange || definitionNode || nameNode;
       const qualifiedTypeName =
-        CLASS_TYPES.has(nodeLabel) && (definitionNodeForRange || definitionNode || nameNode)
-          ? (provider.classExtractor?.extractQualifiedName(
-              definitionNodeForRange || definitionNode || nameNode,
-              nodeName,
-            ) ?? nodeName)
-          : undefined;
+        extractedClassSymbol?.qualifiedName ??
+        (classNodeForSymbol && provider.classExtractor?.isTypeDeclaration(classNodeForSymbol)
+          ? (provider.classExtractor.extractQualifiedName(classNodeForSymbol, nodeName) ?? nodeName)
+          : undefined);
       const frameworkHint = definitionNode
         ? detectFrameworkFromAST(language, (definitionNode.text || '').slice(0, 300))
         : null;
