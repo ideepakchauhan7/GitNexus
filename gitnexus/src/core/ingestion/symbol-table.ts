@@ -6,8 +6,9 @@ export interface SymbolDefinition {
   nodeId: string;
   filePath: string;
   type: NodeLabel;
-  /** Canonical dot-separated qualified type name (e.g. `App.Models.User`).
-   *  Falls back to the simple symbol name when no package/namespace/module scope exists. */
+  /** Canonical dot-separated qualified type name for class-like symbols
+   *  (e.g. `App.Models.User`). Falls back to the simple symbol name when no
+   *  package/namespace/module scope exists or no explicit qualified metadata is provided. */
   qualifiedName?: string;
   parameterCount?: number;
   /** Number of required (non-optional, non-default) parameters.
@@ -166,11 +167,12 @@ export const createSymbolTable = (): SymbolTable => {
       qualifiedName?: string;
     },
   ) => {
+    const qualifiedName = CLASS_TYPES.has(type) ? metadata?.qualifiedName ?? name : metadata?.qualifiedName;
     const def: SymbolDefinition = {
       nodeId,
       filePath,
       type,
-      ...(metadata?.qualifiedName !== undefined ? { qualifiedName: metadata.qualifiedName } : {}),
+      ...(qualifiedName !== undefined ? { qualifiedName } : {}),
       ...(metadata?.parameterCount !== undefined
         ? { parameterCount: metadata.parameterCount }
         : {}),
@@ -232,7 +234,7 @@ export const createSymbolTable = (): SymbolTable => {
         classByName.set(name, [def]);
       }
 
-      const qualifiedKey = metadata?.qualifiedName ?? name;
+      const qualifiedKey = qualifiedName ?? name;
       const qualifiedMatches = classByQualifiedName.get(qualifiedKey);
       if (qualifiedMatches) {
         qualifiedMatches.push(def);

@@ -725,6 +725,7 @@ describe('SymbolTable', () => {
         nodeId: 'class:User',
         filePath: 'src/models.ts',
         type: 'Class',
+        qualifiedName: 'User',
       });
     });
 
@@ -861,7 +862,9 @@ describe('SymbolTable', () => {
           qualifiedName: 'Services.User',
         },
       ]);
-      expect(table.lookupClassByQualifiedName('Data.User')[0].qualifiedName).toBe('Data.User');
+      const dataUserMatches = table.lookupClassByQualifiedName('Data.User');
+      expect(dataUserMatches).toHaveLength(1);
+      expect(dataUserMatches[0].qualifiedName).toBe('Data.User');
     });
 
     it('falls back to the simple name when no qualified metadata is provided', () => {
@@ -871,6 +874,7 @@ describe('SymbolTable', () => {
           nodeId: 'class:User',
           filePath: 'src/models.ts',
           type: 'Class',
+          qualifiedName: 'User',
         },
       ]);
     });
