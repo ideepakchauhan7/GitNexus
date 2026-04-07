@@ -4,7 +4,8 @@ import Parser from 'tree-sitter';
 import { loadParser, loadLanguage, isLanguageAvailable } from '../tree-sitter/parser-loader.js';
 import { getProvider } from './languages/index.js';
 import { generateId } from '../../lib/utils.js';
-import { SymbolTable } from './symbol-table.js';
+import { CLASS_TYPES } from './symbol-table.js';
+import type { SymbolTable } from './symbol-table.js';
 import { ASTCache } from './ast-cache.js';
 import { getLanguageFromFilename, SupportedLanguages } from 'gitnexus-shared';
 import { extractVueScript, isVueSetupTopLevel } from './vue-sfc-extractor.js';
@@ -12,6 +13,7 @@ import { yieldToEventLoop } from './utils/event-loop.js';
 import {
   getDefinitionNodeFromCaptures,
   findEnclosingClassInfo,
+  buildQualifiedTypeName,
   getLabelFromCaptures,
   CLASS_CONTAINER_TYPES,
   type SyntaxNode,
@@ -140,6 +142,7 @@ const processParsingWithWorkers = async (
         returnType: sym.returnType,
         declaredType: sym.declaredType,
         ownerId: sym.ownerId,
+        qualifiedName: sym.qualifiedName,
       });
     }
 
@@ -493,6 +496,10 @@ const processParsingSequential = async (
         );
       }
       const nodeId = generateId(nodeLabel, `${file.path}:${qualifiedName}${arityTag}`);
+      const qualifiedTypeName =
+        CLASS_TYPES.has(nodeLabel) && (definitionNodeForRange || definitionNode || nameNode)
+          ? buildQualifiedTypeName(definitionNodeForRange || definitionNode || nameNode, nodeName)
+          : undefined;
       const frameworkHint = definitionNode
         ? detectFrameworkFromAST(language, (definitionNode.text || '').slice(0, 300))
         : null;
@@ -518,6 +525,7 @@ const processParsingSequential = async (
                   nameNode || definitionNodeForRange,
                   nodeName,
                 ),
+          ...(qualifiedTypeName !== undefined ? { qualifiedName: qualifiedTypeName } : {}),
           ...(frameworkHint
             ? {
                 astFrameworkMultiplier: frameworkHint.entryPointMultiplier,
@@ -573,6 +581,7 @@ const processParsingSequential = async (
         returnType: methodProps.returnType as string | undefined,
         declaredType,
         ownerId: enclosingClassId ?? undefined,
+        qualifiedName: qualifiedTypeName,
       });
 
       const fileId = generateId('File', file.path);

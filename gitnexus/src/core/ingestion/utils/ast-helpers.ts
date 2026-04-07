@@ -208,6 +208,87 @@ export interface EnclosingClassInfo {
   className: string; // e.g. "Animal"
 }
 
+const QUALIFIED_TYPE_FILE_SCOPE_TYPES = new Set([
+  'file_scoped_namespace_declaration',
+  'package_declaration',
+  'package_header',
+  'package_clause',
+]);
+
+const QUALIFIED_TYPE_ANCESTOR_SCOPE_TYPES = new Set([
+  'namespace_definition',
+  'namespace_declaration',
+  ...Array.from(CLASS_CONTAINER_TYPES).filter(
+    (nodeType) => nodeType !== 'impl_item' && nodeType !== 'singleton_class',
+  ),
+]);
+
+const QUALIFIED_SCOPE_NAME_NODE_TYPES = new Set([
+  'nested_namespace_specifier',
+  'scoped_identifier',
+  'scoped_type_identifier',
+  'qualified_name',
+  'namespace_name',
+  'namespace_identifier',
+  'package_identifier',
+  'type_identifier',
+  'identifier',
+  'name',
+  'constant',
+]);
+
+const normalizeQualifiedName = (value: string): string =>
+  value
+    .replace(/\s+/g, '')
+    .replace(/^::/, '')
+    .replace(/::/g, '.')
+    .replace(/\\/g, '.')
+    .replace(/\.+/g, '.')
+    .replace(/^\.+|\.+$/g, '');
+
+const splitQualifiedName = (value: string): string[] => {
+  const normalized = normalizeQualifiedName(value);
+  return normalized ? normalized.split('.').filter(Boolean) : [];
+};
+
+const extractQualifiedScopeSegments = (scopeNode: SyntaxNode): string[] => {
+  const nameNode =
+    scopeNode.childForFieldName?.('name') ??
+    scopeNode.namedChildren?.find((child) => QUALIFIED_SCOPE_NAME_NODE_TYPES.has(child.type));
+  return nameNode ? splitQualifiedName(nameNode.text) : [];
+};
+
+/**
+ * Build a canonical dot-separated qualified type name from file/package scope,
+ * lexical namespace/module scope, and nested type scope.
+ * Examples: `App.Models.User`, `com.example.User`, `Admin.User`.
+ */
+export const buildQualifiedTypeName = (node: SyntaxNode, typeName: string): string => {
+  let root = node;
+  while (root.parent) root = root.parent;
+
+  const fileScopeSegments: string[] = [];
+  for (const child of root.namedChildren ?? []) {
+    if (QUALIFIED_TYPE_FILE_SCOPE_TYPES.has(child.type)) {
+      fileScopeSegments.push(...extractQualifiedScopeSegments(child));
+    }
+  }
+
+  const ancestorScopes: string[][] = [];
+  let current = node.parent;
+  while (current) {
+    if (QUALIFIED_TYPE_ANCESTOR_SCOPE_TYPES.has(current.type)) {
+      const segments = extractQualifiedScopeSegments(current);
+      if (segments.length > 0) ancestorScopes.push(segments);
+    }
+    current = current.parent;
+  }
+
+  return [...fileScopeSegments, ...ancestorScopes.reverse().flat(), ...splitQualifiedName(typeName)]
+    .filter(Boolean)
+    .join('.');
+};
+
 /** Walk up AST to find enclosing class/struct/interface/impl, return its ID and name.
  *  For Go method_declaration nodes, extracts receiver type (e.g. `func (u *User) Save()` → User struct). */
 export const findEnclosingClassInfo = (

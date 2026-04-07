@@ -15,7 +15,8 @@ import { createRequire } from 'node:module';
 import { SupportedLanguages } from 'gitnexus-shared';
 import { getProvider } from '../languages/index.js';
 import { getTreeSitterBufferSize, TREE_SITTER_MAX_BUFFER } from '../constants.js';
-import { SymbolTable } from '../symbol-table.js';
+import { CLASS_TYPES } from '../symbol-table.js';
+import type { SymbolTable } from '../symbol-table.js';
 
 /** Language grammar type accepted by Parser.setLanguage(). */
 type TreeSitterLanguage = Parameters<typeof Parser.prototype.setLanguage>[0];
@@ -43,6 +44,7 @@ import {
   FUNCTION_NODE_TYPES,
   getDefinitionNodeFromCaptures,
   findEnclosingClassInfo,
+  buildQualifiedTypeName,
   type EnclosingClassInfo,
   getLabelFromCaptures,
   findDescendant,
@@ -121,6 +123,7 @@ interface ParsedSymbol {
   name: string;
   nodeId: string;
   type: NodeLabel;
+  qualifiedName?: string;
   parameterCount?: number;
   requiredParameterCount?: number;
   parameterTypes?: string[];
@@ -1906,6 +1909,10 @@ const processFileGroup = (
         arityTag += constTagForId(defMethodMap, nodeName, arityForId, defMethodInfo, groups);
       }
       const nodeId = generateId(nodeLabel, `${file.path}:${qualifiedName}${arityTag}`);
+      const qualifiedTypeName =
+        CLASS_TYPES.has(nodeLabel) && (definitionNode || nameNode)
+          ? buildQualifiedTypeName(definitionNode || nameNode, nodeName)
+          : undefined;
 
       const description = provider.descriptionExtractor?.(nodeLabel, nodeName, captureMap);
 
@@ -1983,6 +1990,7 @@ const processFileGroup = (
             language === SupportedLanguages.Vue && isVueSetup
               ? isVueSetupTopLevel(nameNode || definitionNode)
               : cachedExportCheck(provider.exportChecker, nameNode || definitionNode, nodeName),
+          ...(qualifiedTypeName !== undefined ? { qualifiedName: qualifiedTypeName } : {}),
           ...(frameworkHint
             ? {
                 astFrameworkMultiplier: frameworkHint.entryPointMultiplier,
@@ -2002,6 +2010,7 @@ const processFileGroup = (
         name: nodeName,
         nodeId,
         type: nodeLabel,
+        ...(qualifiedTypeName !== undefined ? { qualifiedName: qualifiedTypeName } : {}),
         parameterCount: methodProps.parameterCount as number | undefined,
         requiredParameterCount: methodProps.requiredParameterCount as number | undefined,
         parameterTypes: methodProps.parameterTypes as string[] | undefined,

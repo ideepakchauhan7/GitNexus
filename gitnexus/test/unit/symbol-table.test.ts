@@ -842,4 +842,53 @@ describe('SymbolTable', () => {
       expect(results[0].nodeId).toBe('class:User:v2');
     });
   });
+
+  describe('lookupClassByQualifiedName', () => {
+    it('indexes class-like definitions by qualified name without replacing simple-name lookup', () => {
+      table.add('src/services/user.cs', 'User', 'class:services:User', 'Class', {
+        qualifiedName: 'Services.User',
+      });
+      table.add('src/data/user.cs', 'User', 'class:data:User', 'Class', {
+        qualifiedName: 'Data.User',
+      });
+
+      expect(table.lookupClassByName('User')).toHaveLength(2);
+      expect(table.lookupClassByQualifiedName('Services.User')).toEqual([
+        {
+          nodeId: 'class:services:User',
+          filePath: 'src/services/user.cs',
+          type: 'Class',
+          qualifiedName: 'Services.User',
+        },
+      ]);
+      expect(table.lookupClassByQualifiedName('Data.User')[0].qualifiedName).toBe('Data.User');
+    });
+
+    it('falls back to the simple name when no qualified metadata is provided', () => {
+      table.add('src/models.ts', 'User', 'class:User', 'Class');
+      expect(table.lookupClassByQualifiedName('User')).toEqual([
+        {
+          nodeId: 'class:User',
+          filePath: 'src/models.ts',
+          type: 'Class',
+        },
+      ]);
+    });
+
+    it('returns empty array for non-class-like types even when qualified metadata is present', () => {
+      table.add('src/utils.ts', 'User', 'func:User', 'Function', {
+        qualifiedName: 'Services.User',
+      });
+      expect(table.lookupClassByQualifiedName('Services.User')).toEqual([]);
+    });
+
+    it('after clear(), returns empty array', () => {
+      table.add('src/services/user.cs', 'User', 'class:User', 'Class', {
+        qualifiedName: 'Services.User',
+      });
+      expect(table.lookupClassByQualifiedName('Services.User')).toHaveLength(1);
+      table.clear();
+      expect(table.lookupClassByQualifiedName('Services.User')).toEqual([]);
+    });
+  });
 });
