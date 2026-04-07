@@ -13,7 +13,6 @@ import { yieldToEventLoop } from './utils/event-loop.js';
 import {
   getDefinitionNodeFromCaptures,
   findEnclosingClassInfo,
-  buildQualifiedTypeName,
   getLabelFromCaptures,
   CLASS_CONTAINER_TYPES,
   type SyntaxNode,
@@ -498,7 +497,10 @@ const processParsingSequential = async (
       const nodeId = generateId(nodeLabel, `${file.path}:${qualifiedName}${arityTag}`);
       const qualifiedTypeName =
         CLASS_TYPES.has(nodeLabel) && (definitionNodeForRange || definitionNode || nameNode)
-          ? buildQualifiedTypeName(definitionNodeForRange || definitionNode || nameNode, nodeName)
+          ? (provider.classExtractor?.extractQualifiedName(
+              definitionNodeForRange || definitionNode || nameNode,
+              nodeName,
+            ) ?? nodeName)
           : undefined;
       const frameworkHint = definitionNode
         ? detectFrameworkFromAST(language, (definitionNode.text || '').slice(0, 300))

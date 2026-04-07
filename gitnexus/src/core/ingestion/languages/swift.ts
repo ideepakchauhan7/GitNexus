@@ -12,6 +12,7 @@
 
 import { SupportedLanguages } from 'gitnexus-shared';
 import type { NodeLabel } from 'gitnexus-shared';
+import { createClassExtractor } from '../class-extractors/generic.js';
 import { defineLanguage } from '../language-provider.js';
 import { typeConfig as swiftConfig } from '../type-extractors/swift.js';
 import { swiftExportChecker } from '../export-detection.js';
@@ -243,6 +244,11 @@ export const swiftProvider = defineLanguage({
   methodExtractor: createMethodExtractor({
     ...swiftMethodConfig,
     extractFunctionName: swiftExtractFunctionName,
+  }),
+  classExtractor: createClassExtractor({
+    language: SupportedLanguages.Swift,
+    typeDeclarationNodes: ['class_declaration', 'protocol_declaration'],
+    ancestorScopeNodeTypes: ['class_declaration', 'protocol_declaration'],
   }),
   implicitImportWirer: wireSwiftImplicitImports,
   builtInNames: BUILT_INS,

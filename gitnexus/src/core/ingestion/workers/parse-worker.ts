@@ -44,7 +44,6 @@ import {
   FUNCTION_NODE_TYPES,
   getDefinitionNodeFromCaptures,
   findEnclosingClassInfo,
-  buildQualifiedTypeName,
   type EnclosingClassInfo,
   getLabelFromCaptures,
   findDescendant,
@@ -1911,7 +1910,8 @@ const processFileGroup = (
       const nodeId = generateId(nodeLabel, `${file.path}:${qualifiedName}${arityTag}`);
       const qualifiedTypeName =
         CLASS_TYPES.has(nodeLabel) && (definitionNode || nameNode)
-          ? buildQualifiedTypeName(definitionNode || nameNode, nodeName)
+          ? (provider.classExtractor?.extractQualifiedName(definitionNode || nameNode, nodeName) ??
+            nodeName)
           : undefined;
 
       const description = provider.descriptionExtractor?.(nodeLabel, nodeName, captureMap);

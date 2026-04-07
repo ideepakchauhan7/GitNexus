@@ -10,6 +10,7 @@
  */
 
 import { SupportedLanguages } from 'gitnexus-shared';
+import { createClassExtractor } from '../class-extractors/generic.js';
 import { defineLanguage } from '../language-provider.js';
 import { typeConfig as goConfig } from '../type-extractors/go.js';
 import { goExportChecker } from '../export-detection.js';
@@ -30,4 +31,9 @@ export const goProvider = defineLanguage({
   importSemantics: 'wildcard',
   fieldExtractor: createFieldExtractor(goFieldConfig),
   methodExtractor: createMethodExtractor(goMethodConfig),
+  classExtractor: createClassExtractor({
+    language: SupportedLanguages.Go,
+    typeDeclarationNodes: ['type_declaration'],
+    fileScopeNodeTypes: ['package_clause'],
+  }),
 });
