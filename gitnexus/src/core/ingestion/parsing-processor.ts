@@ -240,11 +240,23 @@ function seqFindEnclosingClassNode(node: SyntaxNode): SyntaxNode | null {
   let current = node.parent;
   while (current) {
     if (CLASS_CONTAINER_TYPES.has(current.type)) {
-      // Return singleton_class directly so the method extractor sees it as
-      // the owner node and correctly marks methods as static. Name resolution
-      // for qualified names is handled separately by findEnclosingClassInfo.
+      // Ruby singleton_class (class << self) has no name field, so owner/class
+      // resolution should skip it and return the enclosing class/module instead.
+      if (current.type === 'singleton_class') {
+        current = current.parent;
+        continue;
+      }
       return current;
     }
+    current = current.parent;
+  }
+  return null;
+}
+
+function seqFindMethodOwnerNode(node: SyntaxNode): SyntaxNode | null {
+  let current = node.parent;
+  while (current) {
+    if (CLASS_CONTAINER_TYPES.has(current.type)) return current;
     current = current.parent;
   }
   return null;
@@ -438,22 +450,24 @@ const processParsingSequential = async (
         let enriched = false;
 
         if (provider.methodExtractor) {
-          // Try class-based extraction (method inside a class/struct/trait body)
-          const classNode = seqFindEnclosingClassNode(definitionNode);
-          if (classNode) {
+          // Try class-based extraction (method inside a class/struct/trait body).
+          // Ruby `class << self` needs the singleton_class node for `isStatic`,
+          // while owner/class resolution still skips it elsewhere.
+          const methodOwnerNode = seqFindMethodOwnerNode(definitionNode);
+          if (methodOwnerNode) {
             // Cache extract() results per class node to avoid re-traversing the
             // same class body for every method it contains (O(N) -> O(1) per hit).
             let result:
               | { ownerName: string | undefined; methods: MethodInfo[] }
               | null
-              | undefined = seqMethodExtractCache.get(classNode.id);
+              | undefined = seqMethodExtractCache.get(methodOwnerNode.id);
             if (result === undefined) {
               result =
-                provider.methodExtractor.extract(classNode, {
+                provider.methodExtractor.extract(methodOwnerNode, {
                   filePath: file.path,
                   language,
                 }) ?? null;
-              seqMethodExtractCache.set(classNode.id, result);
+              seqMethodExtractCache.set(methodOwnerNode.id, result);
             }
             if (result?.methods?.length) {
               const defLine = definitionNode.startPosition.row + 1;
@@ -464,7 +478,7 @@ const processParsingSequential = async (
                 methodProps = buildMethodProps(info);
                 seqDefMethodInfo = info;
                 seqDefMethods = result.methods;
-                seqClassNodeId = classNode.id;
+                seqClassNodeId = methodOwnerNode.id;
               }
             }
           }
