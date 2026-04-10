@@ -242,6 +242,8 @@ function seqFindEnclosingClassNode(node: SyntaxNode): SyntaxNode | null {
     if (CLASS_CONTAINER_TYPES.has(current.type)) {
       // Ruby singleton_class (class << self) has no name field, so owner/class
       // resolution should skip it and return the enclosing class/module instead.
+      // A file-root `class << self` has no enclosing class/module, so this
+      // intentionally falls through to null rather than synthesizing an owner.
       if (current.type === 'singleton_class') {
         current = current.parent;
         continue;
@@ -253,7 +255,7 @@ function seqFindEnclosingClassNode(node: SyntaxNode): SyntaxNode | null {
   return null;
 }
 
-function seqFindMethodOwnerNode(node: SyntaxNode): SyntaxNode | null {
+function seqFindEnclosingMethodContainerNode(node: SyntaxNode): SyntaxNode | null {
   let current = node.parent;
   while (current) {
     if (CLASS_CONTAINER_TYPES.has(current.type)) return current;
@@ -262,8 +264,8 @@ function seqFindMethodOwnerNode(node: SyntaxNode): SyntaxNode | null {
   return null;
 }
 
-/** Minimal no-op SymbolTable stub for FieldExtractorContext (sequential path has a real
- *  SymbolTable, but it's incomplete at this stage — use the stub for safety). */
+/** Minimal no-op SymbolTable stub for sequential extractor contexts. The real
+ *  SymbolTable is not fully populated yet at this stage, so use the stub for safety. */
 const NOOP_SYMBOL_TABLE_SEQ = {
   lookupExactAll: () => [],
   lookupExact: () => undefined,
@@ -453,7 +455,7 @@ const processParsingSequential = async (
           // Try class-based extraction (method inside a class/struct/trait body).
           // Ruby `class << self` needs the singleton_class node for `isStatic`,
           // while owner/class resolution still skips it elsewhere.
-          const methodOwnerNode = seqFindMethodOwnerNode(definitionNode);
+          const methodOwnerNode = seqFindEnclosingMethodContainerNode(definitionNode);
           if (methodOwnerNode) {
             // Cache extract() results per class node to avoid re-traversing the
             // same class body for every method it contains (O(N) -> O(1) per hit).
