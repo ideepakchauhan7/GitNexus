@@ -75,6 +75,23 @@ export const TYPESCRIPT_QUERIES = `
   function: (member_expression
     property: (property_identifier) @call.name)) @call
 
+; Generic awaited free call: await fn<T>(args)
+; tree-sitter-typescript parses "await fn<T>(args)" as a call_expression whose
+; "function" field is an await_expression (not a bare identifier), because the
+; grammar resolves the ambiguity between generics and comparisons by consuming
+; "await fn" as an expression before attaching <T> as type_arguments.
+(call_expression
+  function: (await_expression
+    (identifier) @call.name)
+  (type_arguments)) @call
+
+; Generic awaited member call: await obj.fn<T>(args)
+(call_expression
+  function: (await_expression
+    (member_expression
+      property: (property_identifier) @call.name))
+  (type_arguments)) @call
+
 ; Constructor calls: new Foo()
 (new_expression
   constructor: (identifier) @call.name) @call
@@ -623,6 +640,14 @@ export const CSHARP_QUERIES = `
 (class_declaration name: (identifier) @heritage.class
   (base_list (generic_name (identifier) @heritage.extends))) @heritage
 
+; Interface inheritance: interface IFoo : IBar / interface IFoo : IBar, IBaz
+; Without these patterns, interface-to-interface relationships are never
+; captured, so transitive "class X implements IBar" chains are broken.
+(interface_declaration name: (identifier) @heritage.class
+  (base_list (identifier) @heritage.extends)) @heritage
+(interface_declaration name: (identifier) @heritage.class
+  (base_list (generic_name (identifier) @heritage.extends))) @heritage
+
 ; Write access: obj.field = value
 (assignment_expression
   left: (member_access_expression
@@ -1131,6 +1156,58 @@ export const DART_QUERIES = `
   (selector
     (unconditional_assignable_selector
       (identifier) @call.name))
+  (selector (argument_part))) @call
+
+; ── Calls: await direct (await doSomething()) ────────────────────────────────
+(await_expression
+  (identifier) @call.name
+  .
+  (selector (argument_part))) @call
+
+; ── Calls: await method chain (await obj.method()) ───────────────────────────
+; Requires argument_part to distinguish method calls from field access (await obj.field)
+(await_expression
+  (selector
+    (unconditional_assignable_selector
+      (identifier) @call.name))
+  (selector (argument_part))) @call
+
+; ── Calls: named argument (foo(child: buildX())) ─────────────────────────────
+(named_argument
+  (identifier) @call.name
+  .
+  (selector (argument_part))) @call
+
+; ── Calls: inside list literals ([buildA(), buildB()]) ───────────────────────
+(list_literal
+  (identifier) @call.name
+  .
+  (selector (argument_part))) @call
+
+; ── Calls: cascade (obj..add(x)..sort()) ─────────────────────────────────────
+; Note: cascade_selector contains identifier directly (no unconditional_assignable_selector
+; wrapper in Dart grammar), so inferCallForm() classifies these as free calls rather than
+; member calls. Cross-file resolution still benefits from the call being recorded.
+(cascade_section
+  (cascade_selector (identifier) @call.name)
+  (argument_part)) @call
+
+; ── Calls: static final field initializers (static final _svc = MyService()) ──
+(static_final_declaration
+  (identifier) @call.name
+  .
+  (selector (argument_part))) @call
+
+; ── Calls: arrow function body (=> buildWidget()) ────────────────────────────
+(function_body "=>"
+  (identifier) @call.name
+  .
+  (selector (argument_part))) @call
+
+; ── Calls: lambda body (() => doSomething()) ─────────────────────────────────
+(function_expression_body
+  (identifier) @call.name
+  .
   (selector (argument_part))) @call
 
 ; ── Re-exports (export 'foo.dart') ───────────────────────────────────────────
